@@ -53,4 +53,11 @@ RESULTS_DIR = REPO_ROOT / "results"
 # 裁判（deepseek）配置：请通过环境变量提供
 JUDGE_API_KEY = os.environ.get("JUDGE_API_KEY", "")
 JUDGE_BASE_URL = os.environ.get("JUDGE_BASE_URL", "https://api.deepseek.com/v1")
-JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "deepseek-reasoner")
+JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "deepseek-v4-flash")
+
+# 裁判请求端点（OpenAI Responses 协议）与推理强度
+JUDGE_URL = os.environ.get(
+    "JUDGE_URL",
+    "https://api.deepseek.com/v1/responses",
+)
+JUDGE_REASONING = os.environ.get("JUDGE_REASONING", "high")

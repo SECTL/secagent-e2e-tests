@@ -80,10 +80,11 @@ set SIMULATE_TIME=2026-08-05T10:30:00                        # 模拟启动时�
 # 或
 .venv/Scripts/python -m pytest test_eval.py -v
 
-# 4. 裁判评分（需要 deepseek key 和端点）
+# 4. 裁判评分（需要 deepseek key；OpenAI Responses 协议）
 set JUDGE_API_KEY=sk-xxx
-set JUDGE_BASE_URL=https://api.deepseek.com/v1
-set JUDGE_MODEL=deepseek-reasoner
+set JUDGE_URL=https://api.deepseek.com/v1/responses
+set JUDGE_MODEL=deepseek-v4-flash
+set JUDGE_REASONING=high
 .venv/Scripts/python judge.py          # 输出 results/judge_report.json
 ```
 

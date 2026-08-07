@@ -5,9 +5,10 @@
   python judge.py [--results-dir results] [--output judge_report.json]
 
 需要环境变量（用户提供）：
-  JUDGE_API_KEY  deepseek API key
-  JUDGE_BASE_URL 端点，默认 https://api.deepseek.com/v1（使用 /chat/completions）
-  JUDGE_MODEL    默认 deepseek-reasoner
+  JUDGE_API_KEY   deepseek API key
+  JUDGE_URL       完整请求端点，默认 https://api.deepseek.com/v1/responses（OpenAI Responses 协议）
+  JUDGE_MODEL     默认 deepseek-v4-flash
+  JUDGE_REASONING 推理强度，默认 high（none|low|medium|high）
 """
 import argparse
 import json
@@ -20,6 +21,8 @@ from eval_config import (
     JUDGE_API_KEY,
     JUDGE_BASE_URL,
     JUDGE_MODEL,
+    JUDGE_REASONING,
+    JUDGE_URL,
     RESULTS_DIR,
 )
 from eval_cases import CASES, CASES_BY_ID
@@ -68,18 +71,26 @@ def judge(results_dir: Path) -> list[dict]:
     executions = [{"trace": load_trace(c["id"], results_dir)} for c in CASES]
     prompt = build_prompt(CASES, executions)
     resp = requests.post(
-        f"{JUDGE_BASE_URL}/chat/completions",
+        JUDGE_URL,
         headers={"Authorization": f"Bearer {JUDGE_API_KEY}"},
         json={
             "model": JUDGE_MODEL,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.0,
-            "max_tokens": 8192,
+            "input": [{"role": "user", "content": prompt}],
+            "reasoning": {"effort": JUDGE_REASONING},
+            "max_output_tokens": 16384,
         },
-        timeout=300,
+        timeout=600,
     )
     resp.raise_for_status()
-    content = resp.json()["choices"][0]["message"]["content"]
+    # OpenAI Responses 协议：取 output 中 message 项的文本
+    payload = resp.json()
+    content = ""
+    for item in payload.get("output", []):
+        if item.get("type") != "message":
+            continue
+        for part in item.get("content", []) or []:
+            if part.get("type") in ("output_text", "text"):
+                content += part.get("text", "")
     # 提取 JSON 数组（模型可能包在 markdown 代码块里）
     content = content.strip()
     if content.startswith("```"):
