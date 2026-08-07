@@ -13,7 +13,12 @@ sys.stdout.reconfigure(encoding="utf-8")
 REPO = pathlib.Path(__file__).resolve().parent
 SRC_WS = pathlib.Path.home() / "SecAgentWorkspace"
 TEST_WS = REPO / "work" / "test_workspace"
-CONNECTOR_SRC = pathlib.Path(r"D:\Code\SecAgentAll\ClassIsland-SecAgent-Connector")
+CONNECTOR_SRC = pathlib.Path(
+    __import__("os").environ.get(
+        "CONNECTOR_SRC",
+        r"D:\Code\SecAgentAll\ClassIsland-SecAgent-Connector",  # 本场开发默认，可用环境变量覆盖
+    )
+)
 
 # 1. 重建测试 workspace
 if TEST_WS.exists():
