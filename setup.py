@@ -23,23 +23,30 @@ CONNECTOR_SRC = pathlib.Path(
 
 
 def inject_virtual_fast_model(text: str) -> str:
-    """在 agent.models 中添加 sectl-official:virtual-fast 模型定义（中转的快速虚拟模型）。"""
+    """在 sectl-official provider 的 models 数组中加入 virtual-fast 模型。
+
+    注意：CLI 归一化配置时 agent.models 会由 agent.providers 重新生成，
+    因此必须注入到 providers 里（generate id 为 sectl-official:virtual-fast），
+    顶层 agent.models 的注入会被覆盖丢弃。
+    """
     if "sectl-official:virtual-fast" in text:
         return text
-    idx = text.find("- id: sectl-official:deepseek-v4-flash")
+    marker = "    - id: sectl-official\n"
+    idx = text.find(marker)
     if idx < 0:
-        print("[setup] 未找到 sectl 模型块，跳过 virtual-fast 注入")
+        print("[setup] 未找到 sectl-official provider 块，跳过 virtual-fast 注入")
         return text
-    end = text.find("\n  systemPrompt:", idx)
-    if end < 0:
-        end = len(text)
-    block = text[idx:end]
-    vf = (
-        block.replace("sectl-official:deepseek-v4-flash", "sectl-official:virtual-fast")
-        .replace("name: DeepSeek V4 Flash", "name: Virtual Fast")
+    models_marker = "      models:\n"
+    models_idx = text.find(models_marker, idx)
+    if models_idx < 0:
+        print("[setup] 未找到 sectl provider 的 models 数组，跳过 virtual-fast 注入")
+        return text
+    insert_at = models_idx + len(models_marker)
+    vf_block = (
+        "        - id: virtual-fast\n"
+        "          name: Virtual Fast\n"
     )
-    vf = re.sub(r"^(\s+)model: deepseek-v4-flash$", r"\1model: virtual-fast", vf, flags=re.M)
-    return text[:end] + "\n" + vf + text[end:]
+    return text[:insert_at] + vf_block + text[insert_at:]
 
 
 # 1. 重建测试 workspace
