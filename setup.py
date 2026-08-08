@@ -29,7 +29,7 @@ def inject_virtual_fast_model(text: str) -> str:
     因此必须注入到 providers 里（generate id 为 sectl-official:virtual-fast），
     顶层 agent.models 的注入会被覆盖丢弃。
     """
-    if "sectl-official:virtual-fast" in text:
+    if "sectl-official:virtual-fast" in text and "sectl-official:virtual-standard" in text:
         return text
     marker = "    - id: sectl-official\n"
     idx = text.find(marker)
@@ -45,6 +45,8 @@ def inject_virtual_fast_model(text: str) -> str:
     vf_block = (
         "        - id: virtual-fast\n"
         "          name: Virtual Fast\n"
+        "        - id: virtual-standard\n"
+        "          name: Virtual Standard\n"
     )
     return text[:insert_at] + vf_block + text[insert_at:]
 
