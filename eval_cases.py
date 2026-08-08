@@ -67,8 +67,9 @@ CASES = [
         "id": "ci_ui_bigger",
         "text": "ci主界面调大一点",
         "expected": (
-            "把主界面组件字号调大：如 MainWindowBodyFontSize 16 → ≥18，"
-            "或 MainWindowLargeFontSize 20 → ≥22（通过 update_classisland_component 的 common_patch）。"
+            "把主界面整体缩放调高：主配置的 Scale（界面缩放）从默认 1.0 调大（如 1.0 → 1.2），"
+            "通过 update_classisland_main_config 的 {\"patch\":{\"Scale\":1.2}}；"
+            "改字号（MainWindowBodyFontSize 等）不是整体缩放。"
         ),
     },
 ]

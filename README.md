@@ -71,7 +71,7 @@ set BACKUP_ZIP=D:\path\to\Backup_ForTest1.zip               # 备份数据 zip
 set PLUGIN_DIR=D:\path\to\ClassIsland-SecAgent-Plugin\bin\TestBuild
 set CONNECTOR_SRC=D:\path\to\ClassIsland-SecAgent-Connector # setup.py 用
 set SECAGENT_ROOT=D:\path\to\SecAgent                        # SecAgent CLI 仓库
-set SECAGENT_MODEL_ID=sectl-official:deepseek-v4-flash       # "快速"档模型
+set SECAGENT_MODEL_ID=sectl-official:virtual-fast           # 默认：sectl 官方服务快速虚拟档（以后测试统一用它）
 set CI_PORT=18799                                            # 测试实例服务端口（避开正式版 18789）
 set SIMULATE_TIME=2026-08-05T10:30:00                        # 模拟启动时间
 

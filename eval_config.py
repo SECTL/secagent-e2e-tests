@@ -36,7 +36,7 @@ SECAGENT_WORKSPACE = Path(os.environ.get(
 ))
 
 # 被测模型："快速"档的虚拟模型（secagent.yaml 中已配置）
-SECAGENT_MODEL_ID = os.environ.get("SECAGENT_MODEL_ID", "sectl-official:deepseek-v4-flash")
+SECAGENT_MODEL_ID = os.environ.get("SECAGENT_MODEL_ID", "sectl-official:virtual-fast")
 
 # 模拟启动时间：2026-08-05（周三）10:30，第 3 节（10:10-10:55）上课中
 SIMULATE_TIME = os.environ.get("SIMULATE_TIME", "2026-08-05T10:30:00")
