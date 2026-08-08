@@ -35,6 +35,8 @@ class CaseResult:
         self.duration = 0.0
         self.tool_calls = []
         self.model_thought = ""
+        # 记录实际使用的被测模型（环境变量可覆盖默认值）
+        self.model_id = SECAGENT_MODEL_ID
 
     def to_dict(self) -> dict:
         return {
@@ -44,6 +46,7 @@ class CaseResult:
             "duration": round(self.duration, 2),
             "session_id": self.session_id,
             "has_tool_calls": bool(self.tool_calls),
+            "model": self.model_id,
             "error": self.error,
         }
 

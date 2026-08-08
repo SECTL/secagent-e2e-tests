@@ -23,8 +23,12 @@ def main():
         summary = json.loads(summary_file.read_text(encoding="utf-8"))
         status = "超时" if summary.get("timed_out") else ("CLI失败" if summary.get("exit_code") != 0 else "完成")
         print(f"  {summary['case_id']:<20} {status:<8} 耗时 {summary.get('duration')}s 会话 {summary.get('session_id')}")
+    from report import generate_report
+
+    report_path = generate_report()
     print(f"\n过程文件位于 {RESULTS_DIR}")
-    print("裁判：python judge.py（需要先设置 JUDGE_API_KEY / JUDGE_BASE_URL）")
+    print(f"评测报告：{report_path}")
+    print("裁判：python judge.py（需先设置 JUDGE_API_KEY；裁判后再跑一次会附带裁判结果）")
     return result.returncode
 
 
