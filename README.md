@@ -75,10 +75,14 @@ set SECAGENT_MODEL_ID=sectl-official:deepseek-v4-flash       # "快速"档模型
 set CI_PORT=18799                                            # 测试实例服务端口（避开正式版 18789）
 set SIMULATE_TIME=2026-08-05T10:30:00                        # 模拟启动时间
 
-# 3. 跑全部用例（每个最多 60 秒，约 5 分钟）
-.venv/Scripts/python run_eval.py
+# 3. 跑全部用例并生成报告（每个最多 60 秒，约 5 分钟）
+pnpm test                  # 一键：pytest + 自动生成 results/report.md
 # 或
-.venv/Scripts/python -m pytest test_eval.py -v
+.venv/Scripts/python run_eval.py
+# 仅跑用例 / 仅生成报告 / 仅裁判
+pnpm run test:only
+pnpm run report
+pnpm run judge
 
 # 4. 裁判评分（需要 deepseek key；OpenAI Responses 协议）
 set JUDGE_API_KEY=sk-xxx

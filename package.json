@@ -1,0 +1,12 @@
+{
+  "name": "secagent-e2e-tests",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SecAgent 端到端评测：pytest 驱动 Agent 操作真实电教软件，deepseek 裁判评分，自动生成 Markdown 报告",
+  "scripts": {
+    "test": "python run_eval.py",
+    "test:only": "python -m pytest test_eval.py -v",
+    "report": "python report.py",
+    "judge": "python judge.py"
+  }
+}
