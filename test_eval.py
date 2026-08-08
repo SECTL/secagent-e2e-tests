@@ -2,8 +2,9 @@
 """SecAgent × ClassIsland 端到端评测用例。
 
 每个用例：独立 ClassIsland 实例（--backupZip + --simulateTime）→ 跑 SecAgent CLI。
-pytest 只保证执行链路（60 秒内完成、有工具调用、过程已落盘）；
-对错判定由 judge.py 调用 deepseek 裁判完成。
+pytest 只保证执行链路（60 秒内完成、过程已落盘）；
+模型是否调用工具、结果对错由 judge.py 调用 deepseek 裁判判定
+（课表上下文提示词可能直接给出答案，未调用工具不视为链路失败）。
 """
 import time
 
@@ -22,9 +23,7 @@ def test_secagent_case(case):
     assert result.exit_code == 0, f"SecAgent CLI 退出码 {result.exit_code}\n{result.stdout[-2000:]}"
     # 3. 必须产生会话过程文件
     assert (result.dir / "runtime.jsonl").exists(), "未找到 runtime.jsonl 过程文件"
-    # 4. 必须存在工具调用（模型是通过工具操作 ClassIsland，而不是凭空回答）
-    assert result.tool_calls, "模型未调用任何 ClassIsland 工具"
-    # 5. 记录摘要供裁判使用
+    # 4. 记录摘要供裁判使用（工具调用数一并记录，供裁判参考；未调用不判失败）
     summary = result.to_dict()
     summary["elapsed"] = round(elapsed, 2)
     summary["text"] = case["text"]
