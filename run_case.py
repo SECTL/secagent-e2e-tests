@@ -26,6 +26,10 @@ class CaseResult:
         self.case_id = case_id
         self.dir = RESULTS_DIR / case_id
         self.dir.mkdir(parents=True, exist_ok=True)
+        # 清理上一轮残留结果文件，避免 judge 混用旧 summary 与本次过程文件
+        for old_file in self.dir.iterdir():
+            if old_file.is_file():
+                old_file.unlink(missing_ok=True)
         self.run_id = uuid.uuid4().hex[:12]
         self.timed_out = False
         self.exit_code = None
