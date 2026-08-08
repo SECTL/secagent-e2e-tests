@@ -125,8 +125,12 @@ def collect_session(result: CaseResult, before_ts: float):
 
 
 def _is_network_flake(out: str, code: int | None) -> bool:
-    """模型端点网络波动（fetch failed）时重试。"""
-    return code != 0 and ("fetch failed" in out or "无法连接模型端点" in out)
+    """模型端点网络波动（fetch failed）或服务端临时故障（500）时重试。"""
+    return code != 0 and (
+        "fetch failed" in out
+        or "无法连接模型端点" in out
+        or "模型请求失败（500）" in out
+    )
 
 
 def run_case(case: dict, log_dir: Path | None = None, max_attempts: int = 3) -> CaseResult:

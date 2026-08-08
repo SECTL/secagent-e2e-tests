@@ -73,6 +73,9 @@ if conn_installed.exists():
     src_main = CONNECTOR_SRC / "main.mjs"
     if src_main.exists():
         shutil.copy2(src_main, conn_installed / "main.mjs")
+    src_manifest = CONNECTOR_SRC / "secagent-plugin.json"
+    if src_manifest.exists():
+        shutil.copy2(src_manifest, conn_installed / "secagent-plugin.json")
     src_skills = CONNECTOR_SRC / "skills"
     if src_skills.exists():
         shutil.rmtree(conn_installed / "skills", ignore_errors=True)
