@@ -4,8 +4,12 @@
 原因：正在运行的 SecAgent 桌面端共享 ~/SecAgentWorkspace，会把插件还原为
 它缓存的旧版。测试使用独立副本，互不干扰。
 """
+from __future__ import annotations
+
+import argparse
+import json
+import os
 import pathlib
-import re
 import shutil
 import sys
 
@@ -15,20 +19,21 @@ REPO = pathlib.Path(__file__).resolve().parent
 SRC_WS = pathlib.Path.home() / "SecAgentWorkspace"
 TEST_WS = REPO / "work" / "test_workspace"
 CONNECTOR_SRC = pathlib.Path(
-    __import__("os").environ.get(
+    os.environ.get(
         "CONNECTOR_SRC",
-        r"D:\Code\SecAgentAll\ClassIsland-SecAgent-Connector",  # 本场开发默认，可用环境变量覆盖
+        r"D:\Code\SecAgentAll\ClassIsland-SecAgent-Connector",
+    )
+)
+CW_CONNECTOR_SRC = pathlib.Path(
+    os.environ.get(
+        "CW_CONNECTOR_SRC",
+        str(pathlib.Path.home() / "CodeSpace" / "ClassWidget-ForTest" / "secagent-connector"),
     )
 )
 
 
 def inject_virtual_fast_model(text: str) -> str:
-    """在 sectl-official provider 的 models 数组中加入 virtual-fast 模型。
-
-    注意：CLI 归一化配置时 agent.models 会由 agent.providers 重新生成，
-    因此必须注入到 providers 里（generate id 为 sectl-official:virtual-fast），
-    顶层 agent.models 的注入会被覆盖丢弃。
-    """
+    """在 sectl-official provider 的 models 数组中加入 virtual-fast 模型。"""
     if "sectl-official:virtual-fast" in text and "sectl-official:virtual-standard" in text:
         return text
     marker = "    - id: sectl-official\n"
@@ -51,55 +56,136 @@ def inject_virtual_fast_model(text: str) -> str:
     return text[:insert_at] + vf_block + text[insert_at:]
 
 
-# 1. 重建测试 workspace
-if TEST_WS.exists():
-    shutil.rmtree(TEST_WS, ignore_errors=True)
-TEST_WS.mkdir(parents=True, exist_ok=True)
-
-# 2. 复制登录态与配置
-for name in ("secagent.yaml", ".env"):
-    src = SRC_WS / name
-    if src.exists():
-        shutil.copy2(src, TEST_WS / name)
-
-# 3. 工作区 skills
-if (SRC_WS / "skills").exists():
-    shutil.copytree(SRC_WS / "skills", TEST_WS / "skills")
-
-# 4. 插件：复制 installed（含 connector），并把 main.mjs 换为新版、skills 换为更新版
-src_plugins = SRC_WS / "plugins"
-if src_plugins.exists():
-    shutil.copytree(src_plugins, TEST_WS / "plugins")
-conn_installed = TEST_WS / "plugins/installed/classisland-connector/1.0.1"
-if conn_installed.exists():
-    src_main = CONNECTOR_SRC / "main.mjs"
+def _copy_connector(src: pathlib.Path, dest: pathlib.Path) -> None:
+    dest.mkdir(parents=True, exist_ok=True)
+    src_main = src / "main.mjs"
     if src_main.exists():
-        shutil.copy2(src_main, conn_installed / "main.mjs")
-    src_manifest = CONNECTOR_SRC / "secagent-plugin.json"
+        shutil.copy2(src_main, dest / "main.mjs")
+    src_manifest = src / "secagent-plugin.json"
     if src_manifest.exists():
-        shutil.copy2(src_manifest, conn_installed / "secagent-plugin.json")
-    src_skills = CONNECTOR_SRC / "skills"
+        shutil.copy2(src_manifest, dest / "secagent-plugin.json")
+    src_skills = src / "skills"
     if src_skills.exists():
-        shutil.rmtree(conn_installed / "skills", ignore_errors=True)
-        shutil.copytree(src_skills, conn_installed / "skills")
+        shutil.rmtree(dest / "skills", ignore_errors=True)
+        shutil.copytree(src_skills, dest / "skills")
+    for extra in ("README.md", "LICENSE", "icon.png"):
+        if (src / extra).exists():
+            shutil.copy2(src / extra, dest / extra)
 
-# 5. 空 sessions（每次 run 的会话从这里读取）
-(TEST_WS / "sessions").mkdir(exist_ok=True)
 
-# 6. secagent.yaml 的 workspace 字段指向测试目录，并注入 virtual-fast 模型
-yaml_path = TEST_WS / "secagent.yaml"
-if yaml_path.exists():
-    text = yaml_path.read_text(encoding="utf-8")
-    text = text.replace(str(SRC_WS).replace("\\", "\\\\"), str(TEST_WS).replace("\\", "\\\\"))
-    text = text.replace(str(SRC_WS), str(TEST_WS))
-    text = inject_virtual_fast_model(text)
-    yaml_path.write_text(text, encoding="utf-8")
+def _latest_installed(plugin_id: str) -> pathlib.Path | None:
+    root = TEST_WS / "plugins" / "installed" / plugin_id
+    if not root.exists():
+        return None
+    versions = [p for p in root.iterdir() if p.is_dir()]
+    if not versions:
+        return None
+    return max(versions, key=lambda p: p.name)
 
-# 7. 校验
-main_file = conn_installed / "main.mjs"
-content = main_file.read_text(encoding="utf-8-sig")
-if "process.env.CLASSISLAND_CONNECTOR_URL" not in content:
-    print("[setup] 错误：connector 不支持环境变量端口！")
-    sys.exit(1)
-print(f"[setup] 测试 workspace 就绪：{TEST_WS}")
-print(f"[setup] connector main.mjs: {content.splitlines()[0][:80]}")
+
+def _ensure_plugin_listed(plugin_id: str, version: str) -> None:
+    plugins_json = TEST_WS / "plugins" / "plugins.json"
+    payload = {"plugins": []}
+    if plugins_json.exists():
+        try:
+            payload = json.loads(plugins_json.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            payload = {"plugins": []}
+    plugins = payload.setdefault("plugins", [])
+    for item in plugins:
+        if item.get("id") == plugin_id:
+            item["enabled"] = True
+            item["version"] = version
+            break
+    else:
+        plugins.append({"id": plugin_id, "version": version, "enabled": True})
+    plugins_json.parent.mkdir(parents=True, exist_ok=True)
+    plugins_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def inject_classisland_connector() -> None:
+    conn_installed = _latest_installed("classisland-connector")
+    if conn_installed is None:
+        print("[setup] 未找到已安装的 classisland-connector，跳过 ClassIsland connector 注入")
+        return
+    if not CONNECTOR_SRC.exists():
+        print(f"[setup] CONNECTOR_SRC 不存在：{CONNECTOR_SRC}，跳过 ClassIsland connector 注入")
+        return
+    _copy_connector(CONNECTOR_SRC, conn_installed)
+    main_file = conn_installed / "main.mjs"
+    if not main_file.exists():
+        print("[setup] 错误：ClassIsland connector 缺少 main.mjs")
+        sys.exit(1)
+    content = main_file.read_text(encoding="utf-8-sig")
+    if "process.env.CLASSISLAND_CONNECTOR_URL" not in content:
+        print("[setup] 错误：ClassIsland connector 不支持环境变量端口！")
+        sys.exit(1)
+    print(f"[setup] ClassIsland connector: {conn_installed}")
+
+
+def inject_classwidget_connector() -> None:
+    if not CW_CONNECTOR_SRC.exists():
+        print(f"[setup] 错误：找不到 Class Widget connector：{CW_CONNECTOR_SRC}")
+        sys.exit(1)
+    conn_installed = _latest_installed("class-widgets")
+    if conn_installed is None:
+        conn_installed = TEST_WS / "plugins" / "installed" / "class-widgets" / "1.0.0"
+    _copy_connector(CW_CONNECTOR_SRC, conn_installed)
+    _ensure_plugin_listed("class-widgets", conn_installed.name)
+    main_file = conn_installed / "main.mjs"
+    content = main_file.read_text(encoding="utf-8-sig")
+    if "process.env.CLASS_WIDGETS_CONNECTOR_URL" not in content:
+        print("[setup] 错误：Class Widget connector 不支持 CLASS_WIDGETS_CONNECTOR_URL！")
+        sys.exit(1)
+    print(f"[setup] Class Widget connector: {conn_installed}")
+
+
+def setup_workspace(product: str) -> None:
+    if TEST_WS.exists():
+        shutil.rmtree(TEST_WS, ignore_errors=True)
+    TEST_WS.mkdir(parents=True, exist_ok=True)
+
+    for name in ("secagent.yaml", ".env"):
+        src = SRC_WS / name
+        if src.exists():
+            shutil.copy2(src, TEST_WS / name)
+
+    if (SRC_WS / "skills").exists():
+        shutil.copytree(SRC_WS / "skills", TEST_WS / "skills")
+
+    src_plugins = SRC_WS / "plugins"
+    if src_plugins.exists():
+        shutil.copytree(src_plugins, TEST_WS / "plugins")
+
+    (TEST_WS / "sessions").mkdir(exist_ok=True)
+
+    yaml_path = TEST_WS / "secagent.yaml"
+    if yaml_path.exists():
+        text = yaml_path.read_text(encoding="utf-8")
+        text = text.replace(str(SRC_WS).replace("\\", "\\\\"), str(TEST_WS).replace("\\", "\\\\"))
+        text = text.replace(str(SRC_WS), str(TEST_WS))
+        text = inject_virtual_fast_model(text)
+        yaml_path.write_text(text, encoding="utf-8")
+
+    if product in ("classisland", "all"):
+        inject_classisland_connector()
+    if product in ("classwidget", "all"):
+        inject_classwidget_connector()
+
+    print(f"[setup] 测试 workspace 就绪：{TEST_WS}（product={product}）")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--product",
+        choices=["classisland", "classwidget", "all"],
+        default=os.environ.get("EVAL_PRODUCT", "classisland"),
+    )
+    args = parser.parse_args()
+    setup_workspace(args.product)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

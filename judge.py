@@ -2,7 +2,7 @@
 """裁判客户端：把测试收集到的执行过程交给 deepseek 裁判评分。
 
 用法：
-  python judge.py [--results-dir results] [--output judge_report.json]
+  python judge.py [--product classisland|classwidget] [--results-dir results] [--output judge_report.json]
 
 需要环境变量（用户提供）：
   JUDGE_API_KEY   deepseek API key
@@ -18,6 +18,7 @@ from pathlib import Path
 import requests
 
 from eval_config import (
+    CW_RESULTS_DIR,
     JUDGE_API_KEY,
     JUDGE_BASE_URL,
     JUDGE_MODEL,
@@ -25,7 +26,8 @@ from eval_config import (
     JUDGE_URL,
     RESULTS_DIR,
 )
-from eval_cases import CASES, CASES_BY_ID
+from eval_cases import CASES as CI_CASES
+from eval_cases_cw import CASES as CW_CASES
 from judge_prompt import build_prompt
 
 
@@ -64,12 +66,13 @@ def load_trace(case_id: str, results_dir: Path) -> str:
     return "\n".join(parts)
 
 
-def judge(results_dir: Path) -> list[dict]:
+def judge(results_dir: Path, product: str = "classisland") -> list[dict]:
     if not JUDGE_API_KEY:
         print("未设置 JUDGE_API_KEY，跳过裁判。请先设置环境变量（key 和端点由用户提供）。")
         return []
-    executions = [{"trace": load_trace(c["id"], results_dir)} for c in CASES]
-    prompt = build_prompt(CASES, executions)
+    cases = CW_CASES if product == "classwidget" else CI_CASES
+    executions = [{"trace": load_trace(c["id"], results_dir)} for c in cases]
+    prompt = build_prompt(cases, executions, product=product)
     resp = requests.post(
         JUDGE_URL,
         headers={"Authorization": f"Bearer {JUDGE_API_KEY}"},
@@ -107,17 +110,20 @@ def judge(results_dir: Path) -> list[dict]:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--results-dir", default=str(RESULTS_DIR))
-    parser.add_argument("--output", default=str(RESULTS_DIR / "judge_report.json"))
+    parser.add_argument("--product", choices=["classisland", "classwidget"], default="classisland")
+    parser.add_argument("--results-dir", default="")
+    parser.add_argument("--output", default="")
     args = parser.parse_args()
-    results_dir = Path(args.results_dir)
-    verdicts = judge(results_dir)
+    results_dir = Path(args.results_dir) if args.results_dir else (
+        CW_RESULTS_DIR if args.product == "classwidget" else RESULTS_DIR
+    )
+    output = Path(args.output) if args.output else results_dir / "judge_report.json"
+    verdicts = judge(results_dir, product=args.product)
     if not verdicts:
         return 1
-    out = Path(args.output)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(verdicts, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"裁判报告已写入 {out}")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(verdicts, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"裁判报告已写入 {output}")
     for v in verdicts:
         print(f"{v.get('case_id')}: {v.get('pass')} — {v.get('reason', '')[:120]}")
     return 0
