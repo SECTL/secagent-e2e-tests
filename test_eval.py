@@ -6,10 +6,29 @@ pytest 只保证执行链路（60 秒内完成、过程已落盘）；
 模型是否调用工具、结果对错由 judge.py 调用 deepseek 裁判判定
 （课表上下文提示词可能直接给出答案，未调用工具不视为链路失败）。
 """
+import json
+import subprocess
+import sys
 import time
 
-from eval_config import CASE_TIMEOUT_SEC
+import pytest
+
+from eval_cases import CASES
+from eval_config import CASE_TIMEOUT_SEC, REPO_ROOT
 from run_case import run_case
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _setup_workspace():
+    subprocess.run(
+        [sys.executable, str(REPO_ROOT / "setup.py"), "--product", "classisland"],
+        check=True,
+    )
+
+
+@pytest.fixture(params=CASES, ids=[c["id"] for c in CASES])
+def case(request):
+    return request.param
 
 
 def test_secagent_case(case):
@@ -28,5 +47,5 @@ def test_secagent_case(case):
     summary["elapsed"] = round(elapsed, 2)
     summary["text"] = case["text"]
     (result.dir / "summary.json").write_text(
-        __import__("json").dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
+        json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
     )

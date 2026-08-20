@@ -6,7 +6,10 @@
   "scripts": {
     "test": "python run_eval.py",
     "test:only": "python -m pytest test_eval.py -v",
+    "test:cw": "python run_eval.py --product classwidget",
+    "test:cw:only": "python -m pytest test_eval_cw.py -v",
     "report": "python report.py",
-    "judge": "python judge.py"
+    "judge": "python judge.py",
+    "judge:cw": "python judge.py --product classwidget"
   }
 }

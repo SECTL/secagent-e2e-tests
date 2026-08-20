@@ -13,6 +13,10 @@ from ci_harness import is_service_ready, start_ci, stop_ci
 from eval_config import (
     CASE_TIMEOUT_SEC,
     CI_PORT,
+    CW_PORT,
+    CW_RESULTS_DIR,
+    CW_SERVICE_URL,
+    CW_BRIDGE_TOKEN,
     REPO_ROOT,
     RESULTS_DIR,
     SECAGENT_MODEL_ID,
@@ -22,9 +26,9 @@ from eval_config import (
 
 
 class CaseResult:
-    def __init__(self, case_id: str):
+    def __init__(self, case_id: str, results_dir: Path | None = None):
         self.case_id = case_id
-        self.dir = RESULTS_DIR / case_id
+        self.dir = (results_dir or RESULTS_DIR) / case_id
         self.dir.mkdir(parents=True, exist_ok=True)
         # 清理上一轮残留结果文件，避免 judge 混用旧 summary 与本次过程文件
         for old_file in self.dir.iterdir():
@@ -55,7 +59,7 @@ class CaseResult:
         }
 
 
-def run_cli(case_text: str, timeout: float) -> tuple[str, int | None, bool]:
+def run_cli(case_text: str, timeout: float, extra_env: dict[str, str] | None = None) -> tuple[str, int | None, bool]:
     """运行 SecAgent CLI：node dist/index.js run <text> --workspace W --model M。"""
     cmd = [
         "node",
@@ -65,9 +69,10 @@ def run_cli(case_text: str, timeout: float) -> tuple[str, int | None, bool]:
         "--workspace", str(SECAGENT_WORKSPACE),
         "--model", SECAGENT_MODEL_ID,
     ]
-    # 传递环境变量，让 connector 连接测试实例的服务端口
     env = dict(os.environ)
     env["CLASSISLAND_CONNECTOR_URL"] = f"http://127.0.0.1:{CI_PORT}"
+    if extra_env:
+        env.update(extra_env)
     proc = subprocess.Popen(
         cmd,
         cwd=str(SECAGENT_ROOT),
@@ -137,33 +142,44 @@ def _is_network_flake(out: str, code: int | None) -> bool:
     )
 
 
-def run_case(case: dict, log_dir: Path | None = None, max_attempts: int = 3) -> CaseResult:
-    """执行一个用例并返回结果（CI 实例由调用方负责释放）。"""
-    result = CaseResult(case["id"])
+def run_case(case: dict, log_dir: Path | None = None, max_attempts: int = 3, product: str = "classisland") -> CaseResult:
+    """执行一个用例并返回结果（被测实例由调用方负责释放）。"""
+    results_dir = CW_RESULTS_DIR if product == "classwidget" else RESULTS_DIR
+    result = CaseResult(case["id"], results_dir=results_dir)
     log_dir = log_dir or (REPO_ROOT / "work" / result.run_id)
     before_ts = time.time()
+    if product == "classwidget":
+        from cw_harness import is_service_ready as ready_fn, start_cw as start_fn, stop_cw as stop_fn
+        extra_env = {
+            "CLASS_WIDGETS_CONNECTOR_URL": CW_SERVICE_URL,
+            "CLASSWIDGETS_CONNECTOR_URL": CW_SERVICE_URL,
+            "CLASSWIDGETS_BRIDGE_PORT": str(CW_PORT),
+            "CLASSWIDGETS_BRIDGE_TOKEN": CW_BRIDGE_TOKEN,
+        }
+        not_ready_msg = "Class Widget 联动服务未就绪"
+    else:
+        ready_fn = is_service_ready
+        start_fn = start_ci
+        stop_fn = stop_ci
+        extra_env = None
+        not_ready_msg = "ClassIsland 联动服务未就绪"
     attempt = 0
     while attempt < max_attempts:
         attempt += 1
         ci_proc = None
         try:
-            # 1. 启动 CI（含插件、模拟时间）
-            ci_proc = start_ci(result.run_id, log_dir)
-            # 2. 等联动服务就绪
-            if not is_service_ready(timeout=15):
-                result.error = "ClassIsland 联动服务未就绪"
+            ci_proc = start_fn(result.run_id, log_dir)
+            if not ready_fn(timeout=15):
+                result.error = not_ready_msg
                 return result
-            # 等 connector 完成首轮工具注册（5s 轮询）
             time.sleep(5)
-            # 3. 跑 SecAgent CLI
             started = time.time()
-            out, code, timed_out = run_cli(case["text"], timeout=CASE_TIMEOUT_SEC)
+            out, code, timed_out = run_cli(case["text"], timeout=CASE_TIMEOUT_SEC, extra_env=extra_env)
             result.duration = time.time() - started
             result.timed_out = timed_out
             result.exit_code = code
             result.stdout = out
             (result.dir / "cli_stdout.txt").write_text(out or "", encoding="utf-8")
-            # 4. 收集会话过程
             collect_session(result, before_ts)
             if not result.timed_out and _is_network_flake(out, code) and attempt < max_attempts:
                 print(f"  [{case['id']}] 模型端点网络波动，重试 {attempt}/{max_attempts}")
@@ -177,5 +193,5 @@ def run_case(case: dict, log_dir: Path | None = None, max_attempts: int = 3) -> 
             return result
         finally:
             if ci_proc is not None:
-                stop_ci(ci_proc)
+                stop_fn(ci_proc)
     return result

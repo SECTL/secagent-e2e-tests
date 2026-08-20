@@ -65,6 +65,8 @@ def collect_cases(results_dir: Path) -> list[dict]:
         if not d.is_dir():
             continue
         summary_file = d / "summary.json"
+        if not summary_file.exists():
+            continue
         summary = _load_json(summary_file) or {}
         if summary.get("model"):
             models.add(summary["model"])
@@ -157,5 +159,6 @@ def generate_report(results_dir: Path = RESULTS_DIR) -> Path:
 
 
 if __name__ == "__main__":
-    out = generate_report()
+    target = Path(sys.argv[1]) if len(sys.argv) > 1 else RESULTS_DIR
+    out = generate_report(target)
     print(f"报告已生成：{out}")

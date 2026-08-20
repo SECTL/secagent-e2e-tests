@@ -1,29 +1,20 @@
 # -*- coding: utf-8 -*-
-"""pytest fixtures：为每个用例提供独立的 ClassIsland 测试实例。"""
-import subprocess
-import sys as _sys
+"""pytest fixtures：会话结束清理临时目录；各产品测试模块自行 setup workspace。"""
 import time
 
 import pytest
 
 from ci_harness import cleanup_leftover_temp_dirs
-from eval_config import REPO_ROOT
-from eval_cases import CASES
-from run_case import run_case
+from cw_harness import cleanup_leftover_temp_dirs as cleanup_cw_temp_dirs
+from eval_config import CW_RESULTS_DIR, RESULTS_DIR
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _setup_and_cleanup():
-    """会话开始前构建独立测试 workspace，结束后清理临时目录。"""
+def _cleanup_temp_dirs():
     t0 = time.time()
-    subprocess.run([_sys.executable, str(REPO_ROOT / "setup.py")], check=True)
     yield
     cleanup_leftover_temp_dirs(t0)
-
-
-@pytest.fixture(params=CASES, ids=[c["id"] for c in CASES])
-def case(request):
-    return request.param
+    cleanup_cw_temp_dirs(t0)
 
 
 def pytest_sessionfinish(session, exitstatus):
@@ -31,7 +22,11 @@ def pytest_sessionfinish(session, exitstatus):
     try:
         from report import generate_report
 
-        out = generate_report()
-        print(f"\n[report] 评测报告已生成：{out}")
+        if RESULTS_DIR.exists() and any(RESULTS_DIR.iterdir()):
+            out = generate_report(RESULTS_DIR)
+            print(f"\n[report] ClassIsland 评测报告：{out}")
+        if CW_RESULTS_DIR.exists() and any(CW_RESULTS_DIR.iterdir()):
+            out = generate_report(CW_RESULTS_DIR)
+            print(f"\n[report] Class Widget 评测报告：{out}")
     except Exception as exc:  # noqa: BLE001
         print(f"[report] 报告生成失败：{exc}")
